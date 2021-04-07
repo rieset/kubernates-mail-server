@@ -1,0 +1,34 @@
+name: 'Apply environments to config files'
+description: 'Pass environments from env'
+runs:
+  using: "composite"
+  steps:
+    - name: Cert manager
+      run: |
+        npx envsub ./certmanager/prod.yaml
+        npx envsub ./certmanager/stage.yaml
+      shell: bash
+
+    - name: Common
+      run: |
+        npx envsub ./config/rbac.yaml
+      shell: bash
+
+    - name: Config
+      run: |
+        npx envsub ./config/configmap.yaml
+        npx envsub ./config/pvc.yaml
+        npx envsub ./config/redis.yaml
+        npx envsub ./config/front.yaml
+        npx envsub ./config/webmail.yaml
+        npx envsub ./config/imap.yaml
+        npx envsub ./config/security.yaml
+        npx envsub ./config/smtp.yaml
+        npx envsub ./config/fetchmail.yaml
+        npx envsub ./config/admin.yaml
+        npx envsub ./config/webdav.yaml
+        npx envsub ./config/admin-ingress.yaml
+        npx envsub ./config/webdav-ingress.yaml
+        npx envsub ./config/security-ingress.yaml
+        npx envsub ./config/webmail-ingress.yaml
+      shell: bash

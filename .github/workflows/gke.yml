@@ -1,0 +1,89 @@
+name: Deploy to GKE
+
+on: push
+
+env:
+  PROJECT_NAME: "mail"
+  NAMESPACE: "ecosystem"
+  BASE_EMAIL: ""
+  SECRET_KEY: ""
+  DOMAIN: ""
+  HOSTNAMES: ""
+  WEBSITE: ""
+  SITENAME: ""
+
+  # CKE credentials
+  GKE_PROJECT_ID: ${{ secrets.GKE_PROJECT_ID }}
+  GKE_SA_KEY: ${{ secrets.GKE_SA_KEY }}
+  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
+  GKE_ZONE: ${{ secrets.GKE_CLUSTER_ZONE }}
+
+  # GitHub container registry credential
+  GHCR_REGISTRY_OWNER: ${{ github.repository_owner }}
+  GHCR_REGISTRY_HOST: "ghcr.io"
+  GHCR_REGISTRY_USERNAME: ${{ secrets.PACKAGES_USER }}
+  GHCR_REGISTRY_PASSWORD: ${{ secrets.PACKAGES_TOKEN }}
+
+jobs:
+  deploy:
+    name: Deploy
+    environment: 'production'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.4.1
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Pass secrets to environment
+        uses: ./.github/set-env/
+        with:
+          secrets: ${{ toJSON(secrets) }}
+
+      # Setup gcloud CLI
+      - uses: google-github-actions/setup-gcloud@master
+        with:
+          service_account_key: ${{ env.GKE_SA_KEY }}
+          project_id: ${{ env.GKE_PROJECT_ID }}
+
+      - run: |-
+          gcloud container clusters get-credentials "$GKE_CLUSTER" --zone "$GKE_ZONE"
+
+      - name: Set variables to config files
+        uses: ./.github/apply-env-to-configs/
+
+      - name: Namespace
+        run: kubectl apply -f ./config/rbac.yaml
+
+      - name: Docker registry secrets
+        run: kubectl -n $NAMESPACE create secret docker-registry $PROJECT_NAME-registry --docker-server=$GHCR_REGISTRY_HOST --docker-username=$GHCR_REGISTRY_USERNAME --docker-password=$GHCR_REGISTRY_PASSWORD --docker-email=GHCR_REGISTRY_EMAIL --dry-run=true -o yaml | kubectl apply -f -
+
+      - name: Certmanager
+        run: |
+          kubectl apply -f ./certmanager/stage.yaml
+          kubectl apply -f ./certmanager/prod.yaml
+
+      - name: Config
+        run: |
+          kubectl apply -f ./config/configmap.yaml
+
+      - name: Service
+        run: |
+          kubectl apply -f ./config/pvc.yaml
+          kubectl apply -f ./config/redis.yaml
+          kubectl apply -f ./config/front.yaml
+          kubectl apply -f ./config/webmail.yaml
+          kubectl apply -f ./config/imap.yaml
+          kubectl apply -f ./config/security.yaml
+          kubectl apply -f ./config/smtp.yaml
+          kubectl apply -f ./config/fetchmail.yaml
+          kubectl apply -f ./config/admin.yaml
+          kubectl apply -f ./config/webdav.yaml
+          kubectl apply -f ./config/admin-ingress.yaml
+          kubectl apply -f ./config/webdav-ingress.yaml
+          kubectl apply -f ./config/security-ingress.yaml
+          kubectl apply -f ./config/webmail-ingress.yaml

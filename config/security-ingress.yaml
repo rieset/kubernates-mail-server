@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: mailu-antispam-ingress
+  namespace: ${NAMESPACE}
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    certmanager.k8s.io/cluster-issuer: letsencrypt-stage
+    ingress.kubernetes.io/rewrite-target: "/"
+    ingress.kubernetes.io/auth-url: http://admin.mailu-mailserver.svc.cluster.local/internal/auth/admin
+    # Following snippet sets the password automatically because you're approved by the auth-url
+    ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Password "mailu";
+  labels:
+    app: mailu
+    role: mail
+    tier: frontend
+spec:
+  tls:
+  - hosts:
+    - "mail.example.com"
+    secretName: letsencrypt-certs-all # If unsure how to generate these, check out https://github.com/ployst/docker-letsencrypt
+  rules:
+  - host: "mail.example.com"
+    http:
+      paths:
+      - path: "/admin/antispam"
+        backend:
+          serviceName: antispam
+          servicePort: 11334
